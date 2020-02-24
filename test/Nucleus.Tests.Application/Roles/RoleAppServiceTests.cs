@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Nucleus.Application.Roles;
 using Nucleus.Application.Roles.Dto;
@@ -14,14 +13,11 @@ namespace Nucleus.Tests.Application.Roles
 {
     public class RoleAppServiceTests : ApplicationTestBase
     {
-        private readonly NucleusDbContext _dbContext;
         private readonly IRoleAppService _roleAppService;
 
         public RoleAppServiceTests()
         {
-            var serviceProvider = TestServer.Host.Services.CreateScope().ServiceProvider;
-            _dbContext = serviceProvider.GetRequiredService<NucleusDbContext>();
-            _roleAppService = serviceProvider.GetRequiredService<IRoleAppService>();
+            _roleAppService = ServiceProvider.GetService<IRoleAppService>();
         }
 
         [Fact]
@@ -38,9 +34,9 @@ namespace Nucleus.Tests.Application.Roles
             };
 
             await _roleAppService.AddRoleAsync(input);
-            await _dbContext.SaveChangesAsync();
+            await DbContext.SaveChangesAsync();
 
-            var dbContextFromAnotherScope = TestServer.Host.Services.GetRequiredService<NucleusDbContext>();
+            var dbContextFromAnotherScope = GetNewScopeServiceProvider().GetService<NucleusDbContext>();
             var insertedTestRole = await dbContextFromAnotherScope.Roles.FindAsync(input.Role.Id);
 
             Assert.NotNull(insertedTestRole);
@@ -62,7 +58,7 @@ namespace Nucleus.Tests.Application.Roles
                 GrantedPermissionIds = new List<Guid> { DefaultPermissions.MemberAccess.Id }
             };
             await _roleAppService.EditRoleAsync(input);
-            var editedTestRole = await _dbContext.Roles.FindAsync(testRole.Id);
+            var editedTestRole = await DbContext.Roles.FindAsync(testRole.Id);
 
             Assert.Contains("TestRoleName_Edited_", editedTestRole.Name);
             Assert.Contains(editedTestRole.RolePermissions, rp => rp.PermissionId == DefaultPermissions.MemberAccess.Id);
@@ -73,7 +69,7 @@ namespace Nucleus.Tests.Application.Roles
         {
             var testRole = await CreateAndGetTestRoleAsync();
 
-            var dbContextFromAnotherScope = TestServer.Host.Services.GetRequiredService<NucleusDbContext>();
+            var dbContextFromAnotherScope = GetNewScopeServiceProvider().GetService<NucleusDbContext>();
             var insertedTestRole = await dbContextFromAnotherScope.Roles.FindAsync(testRole.Id);
 
             Assert.NotNull(insertedTestRole);
@@ -81,7 +77,7 @@ namespace Nucleus.Tests.Application.Roles
 
             await _roleAppService.RemoveRoleAsync(insertedTestRole.Id);
 
-            dbContextFromAnotherScope = TestServer.Host.Services.GetRequiredService<NucleusDbContext>();
+            dbContextFromAnotherScope = GetNewScopeServiceProvider().GetService<NucleusDbContext>();
             var removedTestRole = await dbContextFromAnotherScope.Roles.FindAsync(testRole.Id);
             var removedPermissionMatches = dbContextFromAnotherScope.RolePermissions.Where(rp => rp.RoleId == testRole.Id);
             var removedUserMatches = dbContextFromAnotherScope.RolePermissions.Where(rp => rp.RoleId == testRole.Id);
@@ -115,19 +111,6 @@ namespace Nucleus.Tests.Application.Roles
         {
             var role = await _roleAppService.GetRoleForCreateOrUpdateAsync(DefaultRoles.Member.Id);
             Assert.False(string.IsNullOrEmpty(role.Role.Name));
-        }
-
-        private async Task<Role> CreateAndGetTestRoleAsync()
-        {
-            var testRole = new Role { Id = Guid.NewGuid(), Name = "TestRoleName_" + Guid.NewGuid() };
-            await _dbContext.Roles.AddAsync(testRole);
-            await _dbContext.RolePermissions.AddAsync(new RolePermission
-            {
-                RoleId = testRole.Id,
-                PermissionId = DefaultPermissions.AdministrationAccess.Id
-            });
-            await _dbContext.SaveChangesAsync();
-            return testRole;
         }
     }
 }
